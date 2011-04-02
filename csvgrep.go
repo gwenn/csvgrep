@@ -188,13 +188,15 @@ func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Erro
 			}
 			return
 		},
-		true)
+		false)
 	return
 }
 
 func main() {
 	config := parseArgs()
 	pattern := flag.Arg(0)
+	errorCount := 0
+	matchCount := 0
 	found := false
 	for i := 1; i < flag.NArg(); i++ {
 		if found {
@@ -205,6 +207,7 @@ func main() {
 		magic, err := magicType(f)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error while checking file type: '%s' (%s)\n", f, err)
+			errorCount++
 			continue
 		}
 		if strings.Contains(magic, "text/plain") {
@@ -217,7 +220,13 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Unsupported file type: '%s' (%s)\n", f, magic)
 		}
 		if err != nil {
-			fmt.Printf("Error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			errorCount++
+		} else if found {
+			matchCount++
 		}
+	}
+	if errorCount > 0 || matchCount == 0 {
+		os.Exit(1)
 	}
 }

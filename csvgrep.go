@@ -65,15 +65,13 @@ func parseArgs() *Config {
 	return &Config{grepOptions: options, noHeader: *n, separator: (*sep)[0], start: *v}
 }
 
-func run(name string, args []string, f func(*os.File) os.Error, checkExitStatus bool) (err os.Error) {
-	cmdPath, err := exec.LookPath(name)
+func run(argv []string, f func(*os.File) os.Error, checkExitStatus bool) (err os.Error) {
+	exe, err := exec.LookPath(argv[0])
 	if err != nil {
 		return
 	}
 	getwd, _ := os.Getwd()
-	argv := []string{name}
-	argv = append(argv, args...)
-	cmd, err := exec.Run(cmdPath, argv, os.Environ(), getwd, exec.DevNull, exec.Pipe, exec.PassThrough)
+	cmd, err := exec.Run(exe, argv, os.Environ(), getwd, exec.DevNull, exec.Pipe, exec.PassThrough)
 	if err != nil {
 		return
 	}
@@ -94,7 +92,7 @@ func run(name string, args []string, f func(*os.File) os.Error, checkExitStatus 
 }
 
 func magicType(f string) (out string, err os.Error) {
-	err = run("file", []string{"-b", "-i", f},
+	err = run([]string{"file", "-b", "-i", f},
 		func(stdout *os.File) (e os.Error) {
 			b, e := ioutil.ReadAll(stdout)
 			if e != nil {
@@ -110,7 +108,7 @@ func magicType(f string) (out string, err os.Error) {
 const MAX = 25
 
 func head(cat, f string, sep byte) (headers []string, headerMaxLength int, err os.Error) {
-	err = run(cat, []string{f},
+	err = run([]string{cat, f},
 		func(stdout *os.File) (e os.Error) {
 			bufIn := bufio.NewReader(stdout)
 			reader := csv.NewReader(bufIn)
@@ -152,11 +150,11 @@ func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Erro
 		format = "\t%-" + strconv.Itoa(headerMaxLength) + "s (%2d) : %s\n"
 		//fmt.Printf("Headers: %v (%d)\n", headers, headerMaxLength)
 	}
-	args := []string{}
+	args := []string{grep}
 	args = append(args, config.grepOptions...)
 	args = append(args, pattern, f)
 	//fmt.Printf("Grep: %v\n", args)
-	err = run(grep, args,
+	err = run(args,
 		func(stdout *os.File) (e os.Error) {
 			bufIn := bufio.NewReader(stdout)
 			reader := csv.NewReader(bufIn)

@@ -1,2 +1,5 @@
 csvgrep
+csvgrep_test
 _go_.*
+test.csv.*
+*.swp

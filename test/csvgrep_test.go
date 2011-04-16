@@ -3,7 +3,6 @@ package main
 import (
 	"exec"
 	"fmt"
-	"io/ioutil"
 	"os"
 )
 
@@ -25,7 +24,7 @@ func run(argv []string, f func(*os.File) os.Error, stdout, stderr int) (err os.E
 		cmd.Wait(0)
 		return
 	}
-	w, err := cmd.Wait(0)
+	w, err := cmd.Wait(1)
 	if err != nil {
 		return
 	}
@@ -36,30 +35,7 @@ func run(argv []string, f func(*os.File) os.Error, stdout, stderr int) (err os.E
 }
 
 func compress(cmd, source, target string) {
-	err := run([]string{cmd, "-c", source},
-		func(stdout *os.File) (e os.Error) {
-			b, e := ioutil.ReadAll(stdout)
-			if e != nil {
-				return
-			}
-			e = ioutil.WriteFile(target, b, 0600)
-			return
-		},
-		exec.Pipe, exec.PassThrough)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-const (
-	FILE1 = "test.csv"
-	FILE2 = "test.csv.gz"
-	FILE3 = "test.csv.bz2"
-)
-
-func test() {
-	err := run([]string{"./csvgrep", "-s=,", "c", FILE1, FILE2, FILE3},
+	err := run([]string{"sh", "-x", "-c", cmd + " -c " + source + " > " + target},
 		nil,
 		exec.PassThrough, exec.PassThrough)
 	if err != nil {
@@ -68,8 +44,22 @@ func test() {
 	}
 }
 
+func testWithMultipleFiles() {
+	err := run([]string{"sh", "-x", "-c", "../csvgrep -s=, 'c' test.csv*"},
+		nil,
+		exec.DevNull, exec.PassThrough)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+const (
+	FILE = "test.csv"
+)
+
 func main() {
-	compress("gzip", FILE1, FILE2)
-	compress("bzip2", FILE1, FILE3)
-	test()
+	compress("gzip", FILE, FILE+".gz")
+	compress("bzip2", FILE, FILE+".bz2")
+	testWithMultipleFiles()
 }

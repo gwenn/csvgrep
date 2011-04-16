@@ -2,9 +2,14 @@
 Pretty-print lines matching a pattern in CSV files.
 Transparent support for gzipped/bzipped files.
 TODO
+Ignore match in header line.
 Make possible to customize output format 
 Match only specific field by index or name
 Match only whole field
+Show header mode
+Try to guess separator.
+
+The author disclaims copyright to this source code.
 */
 package main
 
@@ -28,6 +33,12 @@ type Config struct {
 	start       int
 }
 
+/*
+-H --with-filename
+-h --no-filename
+
+-c column number
+*/
 func parseArgs() *Config {
 	var i *bool = flag.Bool("i", false, "ignore case distinctions")
 	var w *bool = flag.Bool("w", false, "force PATTERN to match only whole words")
@@ -81,7 +92,7 @@ func run(argv []string, f func(*os.File) os.Error, checkExitStatus bool) (err os
 		cmd.Wait(0)
 		return
 	}
-	w, err := cmd.Wait(0)
+	w, err := cmd.Wait(1)
 	if err != nil {
 		return
 	}

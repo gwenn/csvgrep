@@ -4,5 +4,6 @@ TARG=csvgrep_test
 GOFILES=\
 	csvgrep_test.go\
 
-include $(GOROOT)/src/Make.cmd
+DEPS=..
 
+include $(GOROOT)/src/Make.cmd

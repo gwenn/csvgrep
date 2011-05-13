@@ -16,7 +16,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"csv"
+	"gocsv.googlecode.com/hg"
 	"exec"
 	"fmt"
 	"flag"
@@ -28,6 +28,7 @@ import (
 
 type Config struct {
 	grepOptions []string
+	fields      []uint
 	noHeader    bool
 	separator   byte
 	start       int
@@ -44,9 +45,10 @@ func parseArgs() *Config {
 	var w *bool = flag.Bool("w", false, "force PATTERN to match only whole words")
 	var n *bool = flag.Bool("n", false, "no header")
 	var sep *string = flag.String("s", ";", "Set the field separator")
+	var f *string = flag.String("f", "", "Set the field indexes to be matched (first field is 1)")
 	var v *int = flag.Int("v", 1, "first column number")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [-iw] [-s=C] [-v=N] PATTERN FILE...\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [-iwn] [-s=C] [-v=N] [-f=N,...] PATTERN FILE...\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -73,7 +75,21 @@ func parseArgs() *Config {
 		flag.Usage()
 		os.Exit(1)
 	}
-	return &Config{grepOptions: options, noHeader: *n, separator: (*sep)[0], start: *v}
+	var fields []uint
+	if len(*f) > 0 {
+		rawFields := strings.Split(*f, ",", -1)
+		fields = make([]uint, len(rawFields))
+		for i, s := range rawFields {
+			f, err := strconv.Atoui(s)
+			if err != nil  {
+				fmt.Fprintf(os.Stderr, "Invalid field index (%v)\n", s)
+				flag.Usage()
+				os.Exit(1)
+			}
+			fields[i] = f
+		}
+	}
+	return &Config{grepOptions: options, noHeader: *n, separator: (*sep)[0], start: *v, fields: fields}
 }
 
 func run(argv []string, f func(*os.File) os.Error, checkExitStatus bool) (err os.Error) {
@@ -146,6 +162,21 @@ func head(cat, f string, sep byte) (headers []string, headerMaxLength int, err o
 	return
 }
 
+func match(fields []uint, pattern string, values []string) bool {
+	if values == nil {
+		return false
+	} else if len(fields) == 0 {
+		return true
+	}
+	for _, field := range fields {
+		fmt.Printf("%v %s\n", values[field - 1], pattern)
+		if values[field - 1] == pattern { // FIXME regexp & -w & -i
+			return true
+		}
+	}
+	return false
+}
+
 func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Error) {
 	//fmt.Println(f, config)
 	var format string
@@ -172,12 +203,13 @@ func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Erro
 			reader.Config.FieldDelim = config.separator
 			for {
 				values, e := reader.ReadRow()
-				if values != nil {
+				if match(config.fields, pattern, values) {
 					if !found {
 						fmt.Println(f, ":")
 						found = true
 					}
 					fmt.Println("-")
+					// package tabwriter
 					for i, value := range values {
 						if config.noHeader {
 							fmt.Printf(format, i+config.start, value)

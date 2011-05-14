@@ -1,0 +1,8 @@
+Command line tool to grep CSV/DSV files and display matching lines in a user-friendly way.
+
+	$ csvgrep -s=, 'z' test.csv 
+	test.csv :
+	-
+		colA ( 1) : a
+		colB ( 2) : b
+		colC ( 3) : c .. z

@@ -45,7 +45,7 @@ func parseArgs() *Config {
 	var w *bool = flag.Bool("w", false, "force PATTERN to match only whole words")
 	var n *bool = flag.Bool("n", false, "no header")
 	var sep *string = flag.String("s", ";", "Set the field separator")
-	var f *string = flag.String("f", "", "Set the field indexes to be matched (first field is 1)")
+	var f *string = flag.String("f", "", "Set the field indexes to be matched (starts at 1)")
 	var v *int = flag.Int("v", 1, "first column number")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [-iwn] [-s=C] [-v=N] [-f=N,...] PATTERN FILE...\n", os.Args[0])
@@ -86,7 +86,7 @@ func parseArgs() *Config {
 				flag.Usage()
 				os.Exit(1)
 			}
-			fields[i] = f
+			fields[i] = f - 1
 		}
 	}
 	return &Config{grepOptions: options, noHeader: *n, separator: (*sep)[0], start: *v, fields: fields}
@@ -169,7 +169,7 @@ func match(fields []uint, pattern string, values []string) bool {
 		return true
 	}
 	for _, field := range fields {
-		fmt.Printf("%v %s\n", values[field - 1], pattern)
+		fmt.Printf("%v %s\n", values[field], pattern)
 		if values[field - 1] == pattern { // FIXME regexp & -w & -i
 			return true
 		}

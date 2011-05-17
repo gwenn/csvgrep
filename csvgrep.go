@@ -24,6 +24,7 @@ import (
 	"os"
 	"strings"
 	"strconv"
+	"tabwriter"
 )
 
 type Config struct {
@@ -132,9 +133,7 @@ func magicType(f string) (out string, err os.Error) {
 	return
 }
 
-const MAX = 25
-
-func head(cat, f string, sep byte) (headers []string, headerMaxLength int, err os.Error) {
+func head(cat, f string, sep byte) (headers []string, err os.Error) {
 	err = run([]string{cat, f},
 		func(stdout *os.File) (e os.Error) {
 			bufIn := bufio.NewReader(stdout)
@@ -144,21 +143,6 @@ func head(cat, f string, sep byte) (headers []string, headerMaxLength int, err o
 			return
 		},
 		true)
-
-	headerMaxLength = 0
-	for _, header := range headers {
-		if len(header) > headerMaxLength {
-			headerMaxLength = len(header)
-		}
-	}
-	if headerMaxLength > MAX {
-		headerMaxLength = MAX
-		for i, header := range headers {
-			if len(header) > headerMaxLength {
-				headers[i] = headers[i][0:headerMaxLength]
-			}
-		}
-	}
 	return
 }
 
@@ -179,19 +163,19 @@ func match(fields []uint, pattern string, values []string) bool {
 
 func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Error) {
 	//fmt.Println(f, config)
-	var format string
 	var headers []string
 	if config.noHeader {
-		format = "\t%2d : %s\n"
 	} else {
-		var headerMaxLength int
-		headers, headerMaxLength, err = head(cat, f, config.separator)
+		headers, err = head(cat, f, config.separator)
 		if err != nil {
 			return
 		}
-		format = "\t%-" + strconv.Itoa(headerMaxLength) + "s (%2d) : %s\n"
-		//fmt.Printf("Headers: %v (%d)\n", headers, headerMaxLength)
+		//fmt.Printf("Headers: %v (%d)\n", headers)
 	}
+
+	//tw := tabwriter.NewWriter(os.Stdout, 8, 1, 8, '\t', tabwriter.Debug)
+	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+
 	args := []string{grep}
 	args = append(args, config.grepOptions...)
 	args = append(args, pattern, f)
@@ -209,16 +193,16 @@ func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Erro
 						found = true
 					}
 					fmt.Println("-")
-					// package tabwriter
 					for i, value := range values {
 						if config.noHeader {
-							fmt.Printf(format, i+config.start, value)
+							tw.Write([]byte(fmt.Sprintf("%d\t%s\n", i+config.start, value)))
 						} else if i < len(headers) {
-							fmt.Printf(format, headers[i], i+config.start, value)
+							tw.Write([]byte(fmt.Sprintf("%d\t%s\t%s\n", i+config.start, headers[i], value)))
 						} else {
-							fmt.Printf(format, "???", i+config.start, value)
+							tw.Write([]byte(fmt.Sprintf("%d\t%s\t%s\n", i+config.start, "???", value)))
 						}
 					}
+					tw.Flush()
 				}
 				if e != nil {
 					if e != os.EOF {

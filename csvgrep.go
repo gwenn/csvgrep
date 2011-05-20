@@ -46,11 +46,10 @@ func parseArgs() *Config {
 	var w *bool = flag.Bool("w", false, "force PATTERN to match only whole words")
 	var n *bool = flag.Bool("n", false, "no header")
 	var sep *string = flag.String("s", ";", "Set the field separator")
-	var tab *bool = flag.Bool("t", false, "Set the field separator to TAB")
 	var f *string = flag.String("f", "", "Set the field indexes to be matched (starts at 1)")
 	var v *int = flag.Int("v", 1, "first column number")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [-iwn] [-t|-s=C] [-v=N] [-f=N,...] PATTERN FILE...\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [-iwn] [-s=C] [-v=N] [-f=N,...] PATTERN FILE...\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -72,7 +71,7 @@ func parseArgs() *Config {
 	if *w {
 		options = append(options, "-w")
 	}
-	if *tab {
+	if *sep == "\\t" {
 		*sep = "\t"
 	} else if len(*sep) > 1 {
 		fmt.Fprintf(os.Stderr, "Separator must be only one character long\n")
@@ -156,8 +155,8 @@ func match(fields []uint, pattern string, values []string) bool {
 		return true
 	}
 	for _, field := range fields {
-		fmt.Printf("%v %s\n", values[field], pattern)
-		if values[field - 1] == pattern { // FIXME regexp & -w & -i
+		//fmt.Printf("%v %s\n", values[field], pattern)
+		if values[field] == pattern { // FIXME regexp & -w & -i
 			return true
 		}
 	}

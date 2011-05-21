@@ -33,6 +33,12 @@ type Config struct {
 	noHeader    bool
 	separator   byte
 	start       int
+	descMode    bool
+}
+
+func isFile(name string) bool {
+	s, err := os.Stat(name)
+	return err == nil && (s.IsRegular() || s.IsSymlink())
 }
 
 /*
@@ -45,21 +51,32 @@ func parseArgs() *Config {
 	var i *bool = flag.Bool("i", false, "ignore case distinctions")
 	var w *bool = flag.Bool("w", false, "force PATTERN to match only whole words")
 	var n *bool = flag.Bool("n", false, "no header")
-	var sep *string = flag.String("s", ";", "Set the field separator")
-	var f *string = flag.String("f", "", "Set the field indexes to be matched (starts at 1)")
+	var d *bool = flag.Bool("d", false, "only show header/describe first line (no grep)")
+	var sep *string = flag.String("s", ";", "set the field separator")
+	var f *string = flag.String("f", "", "set the field indexes to be matched (starts at 1)")
 	var v *int = flag.Int("v", 1, "first column number")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [-iwn] [-s=C] [-v=N] [-f=N,...] PATTERN FILE...\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [-iwn] [-s=C] [-v=N] [-f=N,...] [-d|PATTERN] FILE...\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 	if flag.NArg() == 0 {
-		fmt.Fprintf(os.Stderr, "Missing PATTERN argument\n")
+		if *d {
+			fmt.Fprintf(os.Stderr, "Missing FILE argument\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "Missing PATTERN argument\n")
+		}
+
 		flag.Usage()
 		os.Exit(1)
 	}
-	if flag.NArg() == 1 {
-		fmt.Fprintf(os.Stderr, "Missing FILE argument\n")
+	// TODO Add support to Stdin when no file is specified?
+	if flag.NArg() == 1 && !*d {
+		if isFile(flag.Arg(0)) {
+			fmt.Fprintf(os.Stderr, "Missing PATTERN argument\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "Missing FILE argument\n")
+		}
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -71,7 +88,11 @@ func parseArgs() *Config {
 	if *w {
 		options = append(options, "-w")
 	}
-	if *sep == "\\t" {
+	if len(*sep) == 0 {
+		fmt.Fprintf(os.Stderr, "Separator value missing\n")
+		flag.Usage()
+		os.Exit(1)
+	} else if *sep == "\\t" {
 		*sep = "\t"
 	} else if len(*sep) > 1 {
 		fmt.Fprintf(os.Stderr, "Separator must be only one character long\n")
@@ -84,7 +105,7 @@ func parseArgs() *Config {
 		fields = make([]uint, len(rawFields))
 		for i, s := range rawFields {
 			f, err := strconv.Atoui(s)
-			if err != nil  {
+			if err != nil {
 				fmt.Fprintf(os.Stderr, "Invalid field index (%v)\n", s)
 				flag.Usage()
 				os.Exit(1)
@@ -92,7 +113,7 @@ func parseArgs() *Config {
 			fields[i] = f - 1
 		}
 	}
-	return &Config{grepOptions: options, noHeader: *n, separator: (*sep)[0], start: *v, fields: fields}
+	return &Config{grepOptions: options, noHeader: *n, separator: (*sep)[0], start: *v, fields: fields, descMode: *d}
 }
 
 func run(argv []string, f func(*os.File) os.Error, checkExitStatus bool) (err os.Error) {
@@ -166,9 +187,10 @@ func match(fields []uint, pattern string, values []string) bool {
 func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Error) {
 	//fmt.Println(f, config)
 	var headers []string
-	if config.noHeader {
+	if config.noHeader && !config.descMode {
 	} else {
 		headers, err = head(cat, f, config.separator)
+		// TODO Try to guess/fix the separator if an error occurs (or if only one column is found)
 		if err != nil {
 			return
 		}
@@ -177,6 +199,15 @@ func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Erro
 
 	//tw := tabwriter.NewWriter(os.Stdout, 8, 1, 8, '\t', tabwriter.Debug)
 	tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+
+	if config.descMode {
+		fmt.Println(f, ":")
+		for i, value := range headers {
+			tw.Write([]byte(fmt.Sprintf("%d\t%s\n", i+config.start, value)))
+		}
+		tw.Flush()
+		return
+	}
 
 	args := []string{grep}
 	args = append(args, config.grepOptions...)
@@ -221,11 +252,16 @@ func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Erro
 
 func main() {
 	config := parseArgs()
-	pattern := flag.Arg(0)
+	var start int
+	var pattern string
+	if !config.descMode {
+		start = 1
+		pattern = flag.Arg(0)
+	}
 	errorCount := 0
 	matchCount := 0
 	found := false
-	for i := 1; i < flag.NArg(); i++ {
+	for i := start; i < flag.NArg(); i++ {
 		if found {
 			fmt.Println("---")
 			found = false

@@ -14,17 +14,16 @@ The author disclaims copyright to this source code.
 package main
 
 import (
-	"bufio"
 	"bytes"
-	"gocsv.googlecode.com/hg"
 	"exec"
 	"fmt"
 	"flag"
-	"io/ioutil"
+	"io"
 	"os"
 	"strings"
 	"strconv"
 	"tabwriter"
+	"yacr"
 )
 
 type Config struct {
@@ -116,60 +115,41 @@ func parseArgs() *Config {
 	return &Config{grepOptions: options, noHeader: *n, separator: (*sep)[0], start: *v, fields: fields, descMode: *d}
 }
 
-func run(argv []string, f func(*os.File) os.Error, checkExitStatus bool) (err os.Error) {
-	exe, err := exec.LookPath(argv[0])
+func run(name string, args []string, f func(io.Reader) os.Error) (err os.Error) {
+	c := exec.Command(name, args...)
+	stdout, err := c.StdoutPipe()
 	if err != nil {
 		return
 	}
-	getwd, _ := os.Getwd()
-	cmd, err := exec.Run(exe, argv, os.Environ(), getwd, exec.DevNull, exec.Pipe, exec.PassThrough)
+	err = c.Start()
 	if err != nil {
 		return
 	}
-	defer cmd.Close()
-	err = f(cmd.Stdout)
-	if err != nil {
-		cmd.Wait(0)
-		return
-	}
-	w, err := cmd.Wait(1)
+	err = f(stdout)
 	if err != nil {
 		return
 	}
-	if !w.Exited() || (checkExitStatus && w.ExitStatus() != 0) {
-		err = w
-	}
+	err = c.Wait()
 	return
 }
 
 func magicType(f string) (out string, err os.Error) {
-	err = run([]string{"file", "-b", "-i", f},
-		func(stdout *os.File) (e os.Error) {
-			b, e := ioutil.ReadAll(stdout)
-			if e != nil {
-				return
-			}
-			out = string(bytes.TrimSpace(b)) // chomp
-			return
-		},
-		true)
+	b, err := exec.Command("file", "-b", "-i", f).Output()
+	out = string(bytes.TrimSpace(b)) // chomp
 	return
 }
 
-func head(cat, f string, sep byte) (headers []string, err os.Error) {
-	err = run([]string{cat, f},
-		func(stdout *os.File) (e os.Error) {
-			bufIn := bufio.NewReader(stdout)
-			reader := csv.NewReader(bufIn)
-			reader.Config.FieldDelim = sep
+func head(cat, f string, sep byte) (headers [][]byte, err os.Error) {
+	err = run(cat, []string{f},
+		func(stdout io.Reader) (e os.Error) {
+			reader := yacr.NewReader(stdout, sep, false)
 			headers, e = reader.ReadRow()
 			return
-		},
-		true)
+		})
 	return
 }
 
-func match(fields []uint, pattern string, values []string) bool {
+func match(fields []uint, pattern string, values [][]byte) bool {
 	if values == nil {
 		return false
 	} else if len(fields) == 0 {
@@ -177,7 +157,7 @@ func match(fields []uint, pattern string, values []string) bool {
 	}
 	for _, field := range fields {
 		//fmt.Printf("%v %s\n", values[field], pattern)
-		if values[field] == pattern { // FIXME regexp & -w & -i
+		if string(values[field]) == pattern { // FIXME regexp & -w & -i
 			return true
 		}
 	}
@@ -186,7 +166,7 @@ func match(fields []uint, pattern string, values []string) bool {
 
 func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Error) {
 	//fmt.Println(f, config)
-	var headers []string
+	var headers [][]byte
 	if config.noHeader && !config.descMode {
 	} else {
 		headers, err = head(cat, f, config.separator)
@@ -209,15 +189,13 @@ func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Erro
 		return
 	}
 
-	args := []string{grep}
+	args := []string{}
 	args = append(args, config.grepOptions...)
 	args = append(args, pattern, f)
 	//fmt.Printf("Grep: %v\n", args)
-	err = run(args,
-		func(stdout *os.File) (e os.Error) {
-			bufIn := bufio.NewReader(stdout)
-			reader := csv.NewReader(bufIn)
-			reader.Config.FieldDelim = config.separator
+	err = run(grep, args,
+		func(stdout io.Reader) (e os.Error) {
+			reader := yacr.NewReader(stdout, config.separator, false)
 			for {
 				values, e := reader.ReadRow()
 				if match(config.fields, pattern, values) {
@@ -245,8 +223,7 @@ func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Erro
 				}
 			}
 			return
-		},
-		false)
+		})
 	return
 }
 

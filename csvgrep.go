@@ -30,7 +30,8 @@ type Config struct {
 	grepOptions []string
 	fields      []uint
 	noHeader    bool
-	separator   byte
+	sep   byte
+	quoted bool
 	start       int
 	descMode    bool
 }
@@ -51,11 +52,12 @@ func parseArgs() *Config {
 	var w *bool = flag.Bool("w", false, "force PATTERN to match only whole words")
 	var n *bool = flag.Bool("n", false, "no header")
 	var d *bool = flag.Bool("d", false, "only show header/describe first line (no grep)")
-	var sep *string = flag.String("s", ";", "set the field separator")
+	var q *bool = flag.Bool("q", true, "quoted field mode")
+	var sep *string = flag.String("s", ",", "set the field separator")
 	var f *string = flag.String("f", "", "set the field indexes to be matched (starts at 1)")
 	var v *int = flag.Int("v", 1, "first column number")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [-iwn] [-s=C] [-v=N] [-f=N,...] [-d|PATTERN] FILE...\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [-i] [-w] [-n] [-q] [-s=C] [-v=N] [-f=N,...] [-d|PATTERN] FILE...\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -112,7 +114,7 @@ func parseArgs() *Config {
 			fields[i] = f - 1
 		}
 	}
-	return &Config{grepOptions: options, noHeader: *n, separator: (*sep)[0], start: *v, fields: fields, descMode: *d}
+	return &Config{grepOptions: options, noHeader: *n, sep: (*sep)[0], quoted: *q, start: *v, fields: fields, descMode: *d}
 }
 
 func run(name string, args []string, f func(io.Reader) os.Error) (err os.Error) {
@@ -139,10 +141,10 @@ func magicType(f string) (out string, err os.Error) {
 	return
 }
 
-func head(cat, f string, sep byte) (headers [][]byte, err os.Error) {
+func head(cat, f string, config *Config) (headers [][]byte, err os.Error) {
 	err = run(cat, []string{f},
 		func(stdout io.Reader) (e os.Error) {
-			reader := yacr.NewReader(stdout, sep, false)
+			reader := yacr.NewReader(stdout, config.sep, config.quoted)
 			headers, e = reader.ReadRow()
 			return
 		})
@@ -169,7 +171,7 @@ func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Erro
 	var headers [][]byte
 	if config.noHeader && !config.descMode {
 	} else {
-		headers, err = head(cat, f, config.separator)
+		headers, err = head(cat, f, config)
 		// TODO Try to guess/fix the separator if an error occurs (or if only one column is found)
 		if err != nil {
 			return
@@ -195,7 +197,7 @@ func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Erro
 	//fmt.Printf("Grep: %v\n", args)
 	err = run(grep, args,
 		func(stdout io.Reader) (e os.Error) {
-			reader := yacr.NewReader(stdout, config.separator, false)
+			reader := yacr.NewReader(stdout, config.sep, config.quoted)
 			for {
 				values, e := reader.ReadRow()
 				if match(config.fields, pattern, values) {

@@ -30,8 +30,8 @@ type Config struct {
 	grepOptions []string
 	fields      []uint
 	noHeader    bool
-	sep   byte
-	quoted bool
+	sep         byte
+	quoted      bool
 	start       int
 	descMode    bool
 }

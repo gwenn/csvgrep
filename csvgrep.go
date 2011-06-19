@@ -2,7 +2,6 @@
 Pretty-print lines matching a pattern in CSV files.
 Transparent support for gzipped/bzipped files.
 TODO
-Ignore match in header line.
 Make possible to customize output format 
 Match only specific field by index or name
 Match only whole field
@@ -15,11 +14,10 @@ package main
 
 import (
 	"bytes"
-	"exec"
 	"fmt"
 	"flag"
-	"io"
 	"os"
+	"regexp"
 	"strings"
 	"strconv"
 	"tabwriter"
@@ -27,13 +25,13 @@ import (
 )
 
 type Config struct {
-	grepOptions []string
-	fields      []uint
-	noHeader    bool
-	sep         byte
-	quoted      bool
-	start       int
-	descMode    bool
+	fields   []uint
+	ignoreCase bool
+	noHeader bool
+	sep      byte
+	quoted   bool
+	start    int
+	descMode bool
 }
 
 func isFile(name string) bool {
@@ -49,15 +47,16 @@ func isFile(name string) bool {
 */
 func parseArgs() *Config {
 	var i *bool = flag.Bool("i", false, "ignore case distinctions")
-	var w *bool = flag.Bool("w", false, "force PATTERN to match only whole words")
+	//var w *bool = flag.Bool("w", false, "force PATTERN to match only whole words")
 	var n *bool = flag.Bool("n", false, "no header")
 	var d *bool = flag.Bool("d", false, "only show header/describe first line (no grep)")
 	var q *bool = flag.Bool("q", true, "quoted field mode")
 	var sep *string = flag.String("s", ",", "set the field separator")
 	var f *string = flag.String("f", "", "set the field indexes to be matched (starts at 1)")
-	var v *int = flag.Int("v", 1, "first column number")
+	var v *int = flag.Int("v", 1, "first column number in output/result")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [-i] [-w] [-n] [-q] [-s=C] [-v=N] [-f=N,...] [-d|PATTERN] FILE...\n", os.Args[0])
+		//fmt.Fprintf(os.Stderr, "Usage: %s [-i] [-w] [-n] [-q] [-s=C] [-v=N] [-f=N,...] [-d|PATTERN] FILE...\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [-i] [-n] [-q] [-s=C] [-v=N] [-f=N,...] [-d|PATTERN] FILE...\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -80,14 +79,6 @@ func parseArgs() *Config {
 		}
 		flag.Usage()
 		os.Exit(1)
-	}
-	// TODO flag.Visit
-	options := []string{"-h"}
-	if *i {
-		options = append(options, "-i")
-	}
-	if *w {
-		options = append(options, "-w")
 	}
 	if len(*sep) == 0 {
 		fmt.Fprintf(os.Stderr, "Separator value missing\n")
@@ -114,68 +105,53 @@ func parseArgs() *Config {
 			fields[i] = f - 1
 		}
 	}
-	return &Config{grepOptions: options, noHeader: *n, sep: (*sep)[0], quoted: *q, start: *v, fields: fields, descMode: *d}
+	return &Config{noHeader: *n, ignoreCase: *i, sep: (*sep)[0], quoted: *q, start: *v, fields: fields, descMode: *d}
 }
 
-func run(name string, args []string, f func(io.Reader) os.Error) (err os.Error) {
-	c := exec.Command(name, args...)
-	stdout, err := c.StdoutPipe()
-	if err != nil {
-		return
-	}
-	err = c.Start()
-	if err != nil {
-		return
-	}
-	err = f(stdout)
-	if err != nil {
-		return
-	}
-	err = c.Wait()
-	return
-}
-
-func magicType(f string) (out string, err os.Error) {
-	b, err := exec.Command("file", "-b", "-i", f).Output()
-	out = string(bytes.TrimSpace(b)) // chomp
-	return
-}
-
-func head(cat, f string, config *Config) (headers [][]byte, err os.Error) {
-	err = run(cat, []string{f},
-		func(stdout io.Reader) (e os.Error) {
-			reader := yacr.NewReader(stdout, config.sep, config.quoted)
-			headers, e = reader.ReadRow()
-			return
-		})
-	return
-}
-
-func match(fields []uint, pattern string, values [][]byte) bool {
+func match(fields []uint, pattern *regexp.Regexp, values [][]byte, ignoreCase bool) bool {
 	if values == nil {
 		return false
 	} else if len(fields) == 0 {
-		return true
+		for _, value := range values {
+			if ignoreCase {
+				value = bytes.ToUpper(value)
+			}
+			if pattern.Match(value) {
+				return true
+			}
+		}
+		return false
 	}
 	for _, field := range fields {
-		//fmt.Printf("%v %s\n", values[field], pattern)
-		if string(values[field]) == pattern { // FIXME regexp & -w & -i
+		value := values[field]
+		if ignoreCase {
+			value = bytes.ToUpper(value)
+		}
+		//fmt.Printf("%v %s\n", value, pattern)
+		if pattern.Match(value) {
 			return true
 		}
 	}
 	return false
 }
 
-func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Error) {
+func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err os.Error) {
 	//fmt.Println(f, config)
+	reader, err := yacr.NewFileReader(f, config.sep, config.quoted)
+	if err != nil {
+		return
+	}
+	defer reader.Close()
+
 	var headers [][]byte
 	if config.noHeader && !config.descMode {
 	} else {
-		headers, err = head(cat, f, config)
+		headers, err = reader.ReadRow()
 		// TODO Try to guess/fix the separator if an error occurs (or if only one column is found)
 		if err != nil {
 			return
 		}
+		headers = yacr.DeepCopy(headers)
 		//fmt.Printf("Headers: %v (%d)\n", headers)
 	}
 
@@ -191,51 +167,43 @@ func grep(cat, grep, pattern, f string, config *Config) (found bool, err os.Erro
 		return
 	}
 
-	args := []string{}
-	args = append(args, config.grepOptions...)
-	args = append(args, pattern, f)
-	//fmt.Printf("Grep: %v\n", args)
-	err = run(grep, args,
-		func(stdout io.Reader) (e os.Error) {
-			reader := yacr.NewReader(stdout, config.sep, config.quoted)
-			for {
-				values, e := reader.ReadRow()
-				if match(config.fields, pattern, values) {
-					if !found {
-						fmt.Println(f, ":")
-						found = true
-					}
-					fmt.Println("-")
-					for i, value := range values {
-						if config.noHeader {
-							tw.Write([]byte(fmt.Sprintf("%d\t%s\n", i+config.start, value)))
-						} else if i < len(headers) {
-							tw.Write([]byte(fmt.Sprintf("%d\t%s\t%s\n", i+config.start, headers[i], value)))
-						} else {
-							tw.Write([]byte(fmt.Sprintf("%d\t%s\t%s\n", i+config.start, "???", value)))
-						}
-					}
-					tw.Flush()
-				}
-				if e != nil {
-					if e != os.EOF {
-						err = e
-					}
-					break
+	for {
+		values, err := reader.ReadRow()
+		if match(config.fields, pattern, values, config.ignoreCase) {
+			if !found {
+				fmt.Println(f, ":")
+				found = true
+			}
+			fmt.Println("-")
+			for i, value := range values {
+				if config.noHeader {
+					tw.Write([]byte(fmt.Sprintf("%d\t%s\n", i+config.start, value)))
+				} else if i < len(headers) {
+					tw.Write([]byte(fmt.Sprintf("%d\t%s\t%s\n", i+config.start, headers[i], value)))
+				} else {
+					tw.Write([]byte(fmt.Sprintf("%d\t%s\t%s\n", i+config.start, "???", value)))
 				}
 			}
-			return
-		})
+			tw.Flush()
+		}
+		if err != nil {
+			break
+		}
+	}
 	return
 }
 
 func main() {
 	config := parseArgs()
 	var start int
-	var pattern string
+	var pattern *regexp.Regexp
 	if !config.descMode {
 		start = 1
-		pattern = flag.Arg(0)
+		p := flag.Arg(0)
+		if config.ignoreCase {
+			p = strings.ToUpper(p)
+		}
+		pattern = regexp.MustCompile(p)
 	}
 	errorCount := 0
 	matchCount := 0
@@ -246,22 +214,8 @@ func main() {
 			found = false
 		}
 		f := flag.Arg(i)
-		magic, err := magicType(f)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error while checking file type: '%s' (%s)\n", f, err)
-			errorCount++
-			continue
-		}
-		if strings.Contains(magic, "text/plain") {
-			found, err = grep("cat", "grep", pattern, f, config)
-		} else if strings.Contains(magic, "application/x-gzip") {
-			found, err = grep("zcat", "zgrep", pattern, f, config)
-		} else if strings.Contains(magic, "application/x-bzip2") {
-			found, err = grep("bzcat", "bzgrep", pattern, f, config)
-		} else {
-			fmt.Fprintf(os.Stderr, "Unsupported file type: '%s' (%s)\n", f, magic)
-		}
-		if err != nil {
+		found, err := grep(pattern, f, config)
+		if err != nil && err != os.EOF {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			errorCount++
 		} else if found {

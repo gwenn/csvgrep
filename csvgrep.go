@@ -25,13 +25,13 @@ import (
 )
 
 type Config struct {
-	fields   []uint
+	fields     []uint
 	ignoreCase bool
-	noHeader bool
-	sep      byte
-	quoted   bool
-	start    int
-	descMode bool
+	noHeader   bool
+	sep        byte
+	quoted     bool
+	start      int
+	descMode   bool
 }
 
 func isFile(name string) bool {
@@ -93,7 +93,7 @@ func parseArgs() *Config {
 	}
 	var fields []uint
 	if len(*f) > 0 {
-		rawFields := strings.Split(*f, ",", -1)
+		rawFields := strings.Split(*f, ",")
 		fields = make([]uint, len(rawFields))
 		for i, s := range rawFields {
 			f, err := strconv.Atoui(s)

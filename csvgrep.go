@@ -21,7 +21,7 @@ import (
 	"strings"
 	"strconv"
 	"tabwriter"
-	"yacr"
+	yacr "github.com/gwenn/yacr"
 )
 
 type Config struct {

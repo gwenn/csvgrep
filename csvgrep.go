@@ -13,20 +13,20 @@ The author disclaims copyright to this source code.
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"flag"
 	"os"
-	"regexp"
 	"strings"
 	"strconv"
 	"tabwriter"
-	yacr "github.com/gwenn/yacr"
+	"sre2.googlecode.com/hg/sre2"
+	"github.com/gwenn/yacr"
 )
 
 type Config struct {
 	fields     []uint
 	ignoreCase bool
+	wholeWord  bool
 	noHeader   bool
 	sep        byte
 	quoted     bool
@@ -47,7 +47,7 @@ func isFile(name string) bool {
 */
 func parseArgs() *Config {
 	var i *bool = flag.Bool("i", false, "ignore case distinctions")
-	//var w *bool = flag.Bool("w", false, "force PATTERN to match only whole words")
+	var w *bool = flag.Bool("w", false, "force PATTERN to match only whole words")
 	var n *bool = flag.Bool("n", false, "no header")
 	var d *bool = flag.Bool("d", false, "only show header/describe first line (no grep)")
 	var q *bool = flag.Bool("q", true, "quoted field mode")
@@ -55,8 +55,7 @@ func parseArgs() *Config {
 	var f *string = flag.String("f", "", "set the field indexes to be matched (starts at 1)")
 	var v *int = flag.Int("v", 1, "first column number in output/result")
 	flag.Usage = func() {
-		//fmt.Fprintf(os.Stderr, "Usage: %s [-i] [-w] [-n] [-q] [-s=C] [-v=N] [-f=N,...] [-d|PATTERN] FILE...\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Usage: %s [-i] [-n] [-q] [-s=C] [-v=N] [-f=N,...] [-d|PATTERN] FILE...\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s [-i] [-w] [-n] [-q] [-s=C] [-v=N] [-f=N,...] [-d|PATTERN] FILE...\n", os.Args[0])
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -105,18 +104,15 @@ func parseArgs() *Config {
 			fields[i] = f - 1
 		}
 	}
-	return &Config{noHeader: *n, ignoreCase: *i, sep: (*sep)[0], quoted: *q, start: *v, fields: fields, descMode: *d}
+	return &Config{noHeader: *n, ignoreCase: *i, wholeWord: *w, sep: (*sep)[0], quoted: *q, start: *v, fields: fields, descMode: *d}
 }
 
-func match(fields []uint, pattern *regexp.Regexp, values [][]byte, ignoreCase bool) bool {
+func match(fields []uint, pattern sre2.Re, values [][]byte) bool {
 	if values == nil {
 		return false
 	} else if len(fields) == 0 {
 		for _, value := range values {
-			if ignoreCase {
-				value = bytes.ToUpper(value)
-			}
-			if pattern.Match(value) {
+			if pattern.Match(string(value)) {
 				return true
 			}
 		}
@@ -124,18 +120,15 @@ func match(fields []uint, pattern *regexp.Regexp, values [][]byte, ignoreCase bo
 	}
 	for _, field := range fields {
 		value := values[field]
-		if ignoreCase {
-			value = bytes.ToUpper(value)
-		}
 		//fmt.Printf("%v %s\n", value, pattern)
-		if pattern.Match(value) {
+		if pattern.Match(string(value)) {
 			return true
 		}
 	}
 	return false
 }
 
-func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err os.Error) {
+func grep(pattern sre2.Re, f string, config *Config) (found bool, err os.Error) {
 	//fmt.Println(f, config)
 	reader, err := yacr.NewFileReader(f, config.sep, config.quoted)
 	if err != nil {
@@ -169,7 +162,7 @@ func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err os.
 
 	for {
 		values, err := reader.ReadRow()
-		if match(config.fields, pattern, values, config.ignoreCase) {
+		if match(config.fields, pattern, values) {
 			if !found {
 				fmt.Println(f, ":")
 				found = true
@@ -193,17 +186,23 @@ func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err os.
 	return
 }
 
+func mustCompile(p string, config *Config) sre2.Re {
+	if config.wholeWord {
+		p = "\\b" + p + "\\b"
+	}
+	if config.ignoreCase {
+		p = "(?i)" + p
+	}
+	return sre2.MustParse(p)
+}
+
 func main() {
 	config := parseArgs()
 	var start int
-	var pattern *regexp.Regexp
+	var pattern sre2.Re
 	if !config.descMode {
 		start = 1
-		p := flag.Arg(0)
-		if config.ignoreCase {
-			p = strings.ToUpper(p)
-		}
-		pattern = regexp.MustCompile(p)
+		pattern = mustCompile(flag.Arg(0), config)
 	}
 	errorCount := 0
 	matchCount := 0

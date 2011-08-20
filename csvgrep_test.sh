@@ -14,3 +14,8 @@ tr ',' '\t' < test.csv > test.tsv
 ./csvgrep -s='\t' 'z' test.tsv
 
 rm test.tsv
+
+echo
+echo 'Test flags'
+#./csvgrep -w -i 'Z' test.csv
+./csvgrep -i 'Z' test.csv

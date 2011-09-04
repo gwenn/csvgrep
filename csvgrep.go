@@ -15,11 +15,12 @@ package main
 import (
 	"fmt"
 	"flag"
+	"log"
 	"os"
 	"strings"
 	"strconv"
 	"tabwriter"
-	"sre2.googlecode.com/hg/sre2"
+	"exp/regexp"
 	"github.com/gwenn/yacr"
 )
 
@@ -60,35 +61,30 @@ func parseArgs() *Config {
 	}
 	flag.Parse()
 	if flag.NArg() == 0 {
-		if *d {
-			fmt.Fprintf(os.Stderr, "Missing FILE argument\n")
-		} else {
-			fmt.Fprintf(os.Stderr, "Missing PATTERN argument\n")
-		}
-
 		flag.Usage()
-		os.Exit(1)
+		if *d {
+			log.Fatalf("Missing FILE argument\n")
+		} else {
+			log.Fatalf("Missing PATTERN argument\n")
+		}
 	}
 	// TODO Add support to Stdin when no file is specified?
 	if flag.NArg() == 1 && !*d {
-		if isFile(flag.Arg(0)) {
-			fmt.Fprintf(os.Stderr, "Missing PATTERN argument\n")
-		} else {
-			fmt.Fprintf(os.Stderr, "Missing FILE argument\n")
-		}
 		flag.Usage()
-		os.Exit(1)
+		if isFile(flag.Arg(0)) {
+			log.Fatalf("Missing PATTERN argument\n")
+		} else {
+			log.Fatalf("Missing FILE argument\n")
+		}
 	}
 	if len(*sep) == 0 {
-		fmt.Fprintf(os.Stderr, "Separator value missing\n")
 		flag.Usage()
-		os.Exit(1)
+		log.Fatalf("Separator value missing\n")
 	} else if *sep == "\\t" {
 		*sep = "\t"
 	} else if len(*sep) > 1 {
-		fmt.Fprintf(os.Stderr, "Separator must be only one character long\n")
 		flag.Usage()
-		os.Exit(1)
+		log.Fatalf("Separator must be only one character long\n")
 	}
 	var fields []uint
 	if len(*f) > 0 {
@@ -97,9 +93,8 @@ func parseArgs() *Config {
 		for i, s := range rawFields {
 			f, err := strconv.Atoui(s)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid field index (%v)\n", s)
 				flag.Usage()
-				os.Exit(1)
+				log.Fatalf("Invalid field index (%v)\n", s)
 			}
 			fields[i] = f - 1
 		}
@@ -107,12 +102,12 @@ func parseArgs() *Config {
 	return &Config{noHeader: *n, ignoreCase: *i, wholeWord: *w, sep: (*sep)[0], quoted: *q, start: *v, fields: fields, descMode: *d}
 }
 
-func match(fields []uint, pattern sre2.Re, values [][]byte) bool {
+func match(fields []uint, pattern *regexp.Regexp, values [][]byte) bool {
 	if values == nil {
 		return false
 	} else if len(fields) == 0 {
 		for _, value := range values {
-			if pattern.Match(string(value)) {
+			if pattern.Match(value) {
 				return true
 			}
 		}
@@ -121,14 +116,14 @@ func match(fields []uint, pattern sre2.Re, values [][]byte) bool {
 	for _, field := range fields {
 		value := values[field]
 		//fmt.Printf("%v %s\n", value, pattern)
-		if pattern.Match(string(value)) {
+		if pattern.Match(value) {
 			return true
 		}
 	}
 	return false
 }
 
-func grep(pattern sre2.Re, f string, config *Config) (found bool, err os.Error) {
+func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err os.Error) {
 	//fmt.Println(f, config)
 	reader, err := yacr.NewFileReader(f, config.sep, config.quoted)
 	if err != nil {
@@ -186,20 +181,20 @@ func grep(pattern sre2.Re, f string, config *Config) (found bool, err os.Error) 
 	return
 }
 
-func mustCompile(p string, config *Config) sre2.Re {
+func mustCompile(p string, config *Config) *regexp.Regexp {
 	if config.wholeWord {
 		p = "\\b" + p + "\\b"
 	}
 	if config.ignoreCase {
 		p = "(?i)" + p
 	}
-	return sre2.MustParse(p)
+	return regexp.MustCompile(p)
 }
 
 func main() {
 	config := parseArgs()
 	var start int
-	var pattern sre2.Re
+	var pattern *regexp.Regexp
 	if !config.descMode {
 		start = 1
 		pattern = mustCompile(flag.Arg(0), config)

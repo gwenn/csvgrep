@@ -11,7 +11,7 @@ echo
 echo 'Test TAB'
 tr ',' '\t' < test.csv > test.tsv
 
-./csvgrep -s='\t' 'z' test.tsv
+./csvgrep 'z' test.tsv
 
 rm test.tsv
 

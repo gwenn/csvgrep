@@ -30,6 +30,7 @@ type Config struct {
 	wholeWord  bool
 	noHeader   bool
 	sep        byte
+	guess      bool
 	quoted     bool
 	start      int
 	descMode   bool
@@ -86,6 +87,13 @@ func parseArgs() *Config {
 		flag.Usage()
 		log.Fatalf("Separator must be only one character long\n")
 	}
+	guess := true
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "s" {
+			guess = false
+		}
+	})
+
 	var fields []uint
 	if len(*f) > 0 {
 		rawFields := strings.Split(*f, ",")
@@ -99,7 +107,7 @@ func parseArgs() *Config {
 			fields[i] = f - 1
 		}
 	}
-	return &Config{noHeader: *n, ignoreCase: *i, wholeWord: *w, sep: (*sep)[0], quoted: *q, start: *v, fields: fields, descMode: *d}
+	return &Config{noHeader: *n, ignoreCase: *i, wholeWord: *w, sep: (*sep)[0], guess: guess, quoted: *q, start: *v, fields: fields, descMode: *d}
 }
 
 func match(fields []uint, pattern *regexp.Regexp, values [][]byte) bool {
@@ -129,6 +137,7 @@ func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err os.
 	if err != nil {
 		return
 	}
+	reader.Guess = config.guess
 	defer reader.Close()
 
 	var headers [][]byte

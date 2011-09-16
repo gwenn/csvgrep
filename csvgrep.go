@@ -5,8 +5,6 @@ TODO
 Make possible to customize output format 
 Match only specific field by index or name
 Match only whole field
-Show header mode
-Try to guess separator.
 
 The author disclaims copyright to this source code.
 */

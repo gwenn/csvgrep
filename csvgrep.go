@@ -18,7 +18,7 @@ import (
 	"strings"
 	"strconv"
 	"tabwriter"
-	"exp/regexp"
+	"regexp"
 	"github.com/gwenn/yacr"
 )
 

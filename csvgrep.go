@@ -13,6 +13,7 @@ package main
 import (
 	"fmt"
 	"flag"
+	"io"
 	"log"
 	"os"
 	"strings"
@@ -129,7 +130,7 @@ func match(fields []uint, pattern *regexp.Regexp, values [][]byte) bool {
 	return false
 }
 
-func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err os.Error) {
+func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err error) {
 	//fmt.Println(f, config)
 	reader, err := yacr.NewFileReader(f, config.sep, config.quoted)
 	if err != nil {
@@ -216,7 +217,7 @@ func main() {
 		}
 		f := flag.Arg(i)
 		found, err := grep(pattern, f, config)
-		if err != nil && err != os.EOF {
+		if err != nil && err != io.EOF {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			errorCount++
 		} else if found {

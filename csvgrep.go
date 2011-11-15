@@ -11,16 +11,16 @@ The author disclaims copyright to this source code.
 package main
 
 import (
-	"fmt"
 	"flag"
+	"fmt"
+	"github.com/gwenn/yacr"
 	"io"
 	"log"
 	"os"
-	"strings"
-	"strconv"
-	"tabwriter"
 	"regexp"
-	"github.com/gwenn/yacr"
+	"strconv"
+	"strings"
+	"text/tabwriter"
 )
 
 type Config struct {

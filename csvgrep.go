@@ -37,7 +37,7 @@ type Config struct {
 
 func isFile(name string) bool {
 	s, err := os.Stat(name)
-	return err == nil && (s.IsRegular() || s.IsSymlink())
+	return err == nil && (!s.IsDir() || (s.Mode()&os.ModeSymlink == 0))
 }
 
 /*

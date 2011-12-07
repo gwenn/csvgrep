@@ -24,7 +24,7 @@ import (
 )
 
 type Config struct {
-	fields     []uint
+	fields     []uint64
 	ignoreCase bool
 	wholeWord  bool
 	noHeader   bool
@@ -93,12 +93,12 @@ func parseArgs() *Config {
 		}
 	})
 
-	var fields []uint
+	var fields []uint64
 	if len(*f) > 0 {
 		rawFields := strings.Split(*f, ",")
-		fields = make([]uint, len(rawFields))
+		fields = make([]uint64, len(rawFields))
 		for i, s := range rawFields {
-			f, err := strconv.Atoui(s)
+			f, err := strconv.ParseUint(s, 10, 0)
 			if err != nil {
 				flag.Usage()
 				log.Fatalf("Invalid field index (%v)\n", s)
@@ -109,7 +109,7 @@ func parseArgs() *Config {
 	return &Config{noHeader: *n, ignoreCase: *i, wholeWord: *w, sep: (*sep)[0], guess: guess, quoted: *q, start: *v, fields: fields, descMode: *d}
 }
 
-func match(fields []uint, pattern *regexp.Regexp, values [][]byte) bool {
+func match(fields []uint64, pattern *regexp.Regexp, values [][]byte) bool {
 	if values == nil {
 		return false
 	} else if len(fields) == 0 {

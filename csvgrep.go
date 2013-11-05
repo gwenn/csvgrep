@@ -2,7 +2,7 @@
 Pretty-print lines matching a pattern in CSV files.
 Transparent support for gzipped/bzipped files.
 TODO
-Make possible to customize output format 
+Make possible to customize output format
 Match only specific field by index or name
 Match only whole field
 
@@ -14,7 +14,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/gwenn/yacr"
-	"io"
 	"log"
 	"os"
 	"regexp"
@@ -29,10 +28,10 @@ type Config struct {
 	wholeWord  bool
 	noHeader   bool
 	sep        byte
-	guess      bool
-	quoted     bool
-	start      int
-	descMode   bool
+	//	guess      bool
+	quoted   bool
+	start    int
+	descMode bool
 }
 
 func isFile(name string) bool {
@@ -86,12 +85,12 @@ func parseArgs() *Config {
 		flag.Usage()
 		log.Fatalf("Separator must be only one character long\n")
 	}
-	guess := true
+	/*guess := true
 	flag.Visit(func(f *flag.Flag) {
 		if f.Name == "s" {
 			guess = false
 		}
-	})
+	})*/
 
 	var fields []uint64
 	if len(*f) > 0 {
@@ -106,7 +105,7 @@ func parseArgs() *Config {
 			fields[i] = f - 1
 		}
 	}
-	return &Config{noHeader: *n, ignoreCase: *i, wholeWord: *w, sep: (*sep)[0], guess: guess, quoted: *q, start: *v, fields: fields, descMode: *d}
+	return &Config{noHeader: *n, ignoreCase: *i, wholeWord: *w, sep: (*sep)[0] /*, guess: guess*/, quoted: *q, start: *v, fields: fields, descMode: *d}
 }
 
 func match(fields []uint64, pattern *regexp.Regexp, values [][]byte) bool {
@@ -132,22 +131,27 @@ func match(fields []uint64, pattern *regexp.Regexp, values [][]byte) bool {
 
 func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err error) {
 	//fmt.Println(f, config)
-	reader, err := yacr.NewFileReader(f, config.sep, config.quoted)
+	in, err := yacr.Zopen(f)
 	if err != nil {
 		return
 	}
-	reader.Guess = config.guess
-	defer reader.Close()
+	defer in.Close()
+	reader := yacr.NewReader(in, config.sep, config.quoted)
+	//reader.Guess = config.guess
 
-	var headers [][]byte
+	var headers []string
 	if config.noHeader && !config.descMode {
 	} else {
-		headers, err = reader.ReadRow()
+		for reader.Scan() {
+			headers = append(headers, reader.Text())
+			if reader.EndOfRecord() {
+				break
+			}
+		}
 		// TODO Try to guess/fix the separator if an error occurs (or if only one column is found)
-		if err != nil {
+		if err = reader.Err(); err != nil {
 			return
 		}
-		headers = yacr.DeepCopy(headers)
 		//fmt.Printf("Headers: %v (%d)\n", headers)
 	}
 
@@ -163,8 +167,12 @@ func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err err
 		return
 	}
 
-	for {
-		values, err := reader.ReadRow()
+	var values [][]byte = make([][]byte, 0, 10)
+	for reader.Scan() {
+		values = append(values, reader.Bytes())
+		if !reader.EndOfRecord() {
+			continue
+		}
 		if match(config.fields, pattern, values) {
 			if !found {
 				fmt.Println(f, ":")
@@ -182,10 +190,9 @@ func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err err
 			}
 			tw.Flush()
 		}
-		if err != nil {
-			break
-		}
+		values = values[:0]
 	}
+	err = reader.Err()
 	return
 }
 
@@ -217,7 +224,7 @@ func main() {
 		}
 		f := flag.Arg(i)
 		found, err := grep(pattern, f, config)
-		if err != nil && err != io.EOF {
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			errorCount++
 		} else if found {

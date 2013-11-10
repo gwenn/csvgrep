@@ -28,10 +28,10 @@ type Config struct {
 	wholeWord  bool
 	noHeader   bool
 	sep        byte
-	//	guess      bool
-	quoted   bool
-	start    int
-	descMode bool
+	guess      bool
+	quoted     bool
+	start      int
+	descMode   bool
 }
 
 func isFile(name string) bool {
@@ -85,12 +85,12 @@ func parseArgs() *Config {
 		flag.Usage()
 		log.Fatalf("Separator must be only one character long\n")
 	}
-	/*guess := true
+	guess := true
 	flag.Visit(func(f *flag.Flag) {
 		if f.Name == "s" {
 			guess = false
 		}
-	})*/
+	})
 
 	var fields []uint64
 	if len(*f) > 0 {
@@ -105,7 +105,7 @@ func parseArgs() *Config {
 			fields[i] = f - 1
 		}
 	}
-	return &Config{noHeader: *n, ignoreCase: *i, wholeWord: *w, sep: (*sep)[0] /*, guess: guess*/, quoted: *q, start: *v, fields: fields, descMode: *d}
+	return &Config{noHeader: *n, ignoreCase: *i, wholeWord: *w, sep: (*sep)[0], guess: guess, quoted: *q, start: *v, fields: fields, descMode: *d}
 }
 
 func match(fields []uint64, pattern *regexp.Regexp, values [][]byte) bool {
@@ -136,8 +136,7 @@ func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err err
 		return
 	}
 	defer in.Close()
-	reader := yacr.NewReader(in, config.sep, config.quoted)
-	//reader.Guess = config.guess
+	reader := yacr.NewReader(in, config.sep, config.quoted, config.guess)
 
 	var headers []string
 	if config.noHeader && !config.descMode {

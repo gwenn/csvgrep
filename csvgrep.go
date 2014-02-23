@@ -13,16 +13,17 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/gwenn/yacr"
 	"log"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/gwenn/yacr"
 )
 
-type Config struct {
+type config struct {
 	fields     []uint64
 	ignoreCase bool
 	wholeWord  bool
@@ -45,15 +46,15 @@ func isFile(name string) bool {
 
 -c column number
 */
-func parseArgs() *Config {
-	var i *bool = flag.Bool("i", false, "ignore case distinctions")
-	var w *bool = flag.Bool("w", false, "force PATTERN to match only whole words")
-	var n *bool = flag.Bool("n", false, "no header")
-	var d *bool = flag.Bool("d", false, "only show header/describe first line (no grep)")
-	var q *bool = flag.Bool("q", true, "quoted field mode")
-	var sep *string = flag.String("s", ",", "set the field separator")
-	var f *string = flag.String("f", "", "set the field indexes to be matched (starts at 1)")
-	var v *int = flag.Int("v", 1, "first column number in output/result")
+func parseArgs() *config {
+	var i = flag.Bool("i", false, "ignore case distinctions")
+	var w = flag.Bool("w", false, "force PATTERN to match only whole words")
+	var n = flag.Bool("n", false, "no header")
+	var d = flag.Bool("d", false, "only show header/describe first line (no grep)")
+	var q = flag.Bool("q", true, "quoted field mode")
+	var sep = flag.String("s", ",", "set the field separator")
+	var f = flag.String("f", "", "set the field indexes to be matched (starts at 1)")
+	var v = flag.Int("v", 1, "first column number in output/result")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [-i] [-w] [-n] [-q] [-s=C] [-v=N] [-f=N,...] [-d|PATTERN] FILE...\n", os.Args[0])
 		flag.PrintDefaults()
@@ -105,7 +106,7 @@ func parseArgs() *Config {
 			fields[i] = f - 1
 		}
 	}
-	return &Config{noHeader: *n, ignoreCase: *i, wholeWord: *w, sep: (*sep)[0], guess: guess, quoted: *q, start: *v, fields: fields, descMode: *d}
+	return &config{noHeader: *n, ignoreCase: *i, wholeWord: *w, sep: (*sep)[0], guess: guess, quoted: *q, start: *v, fields: fields, descMode: *d}
 }
 
 func match(fields []uint64, pattern *regexp.Regexp, values [][]byte) bool {
@@ -129,7 +130,7 @@ func match(fields []uint64, pattern *regexp.Regexp, values [][]byte) bool {
 	return false
 }
 
-func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err error) {
+func grep(pattern *regexp.Regexp, f string, config *config) (found bool, err error) {
 	//fmt.Println(f, config)
 	in, err := yacr.Zopen(f)
 	if err != nil {
@@ -166,7 +167,7 @@ func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err err
 		return
 	}
 
-	var values [][]byte = make([][]byte, 0, 10)
+	var values = make([][]byte, 0, 10)
 	for reader.Scan() {
 		values = append(values, reader.Bytes())
 		if !reader.EndOfRecord() {
@@ -195,7 +196,7 @@ func grep(pattern *regexp.Regexp, f string, config *Config) (found bool, err err
 	return
 }
 
-func mustCompile(p string, config *Config) *regexp.Regexp {
+func mustCompile(p string, config *config) *regexp.Regexp {
 	if config.wholeWord {
 		p = "\\b" + p + "\\b"
 	}

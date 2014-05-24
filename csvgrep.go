@@ -168,9 +168,21 @@ func grep(pattern *regexp.Regexp, f string, config *config) (found bool, err err
 	}
 
 	var values = make([][]byte, 0, 10)
+	var v, cv []byte
+	orig := values
+	i := 0
 	for reader.Scan() {
-		values = append(values, reader.Bytes())
+		v = reader.Bytes() // must be copied
+		if i < len(orig) {
+			cv = orig[i]
+			cv = append(cv[:0], v...)
+		} else {
+			cv = make([]byte, len(v))
+			copy(cv, v)
+		}
+		values = append(values, cv)
 		if !reader.EndOfRecord() {
+			i++
 			continue
 		}
 		if match(config.fields, pattern, values) {
@@ -190,7 +202,9 @@ func grep(pattern *regexp.Regexp, f string, config *config) (found bool, err err
 			}
 			tw.Flush()
 		}
+		orig = values
 		values = values[:0]
+		i = 0
 	}
 	err = reader.Err()
 	return
